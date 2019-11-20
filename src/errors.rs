@@ -19,6 +19,8 @@ pub enum Error {
     TooFewPrimes,
     #[fail(display = "invalid prime value")]
     InvalidPrime,
+    #[fail(display = "invalid coefficient")]
+    InvalidCoefficient,
     #[fail(display = "invalid modulus")]
     InvalidModulus,
     #[fail(display = "invalid exponent")]

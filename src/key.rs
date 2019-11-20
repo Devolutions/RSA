@@ -300,6 +300,25 @@ impl RSAPrivateKey {
         k
     }
 
+    pub fn from_components2(
+        n: BigUint,
+        e: BigUint,
+        d: BigUint,
+        primes: Vec<BigUint>,
+    ) -> Result<RSAPrivateKey> {
+        let mut k = RSAPrivateKey {
+            n,
+            e,
+            d,
+            primes,
+            precomputed: None,
+        };
+
+        k.precompute2()?;
+
+        Ok(k)
+    }
+
     /// Get the public key from the private key, cloning `n` and `e`.
     ///
     /// Generally this is not needed since `RSAPrivateKey` implements the `PublicKey` trait,
@@ -352,6 +371,49 @@ impl RSAPrivateKey {
             qinv,
             crt_values,
         });
+    }
+
+    /// Performs some calculations to speed up private key operations.
+    pub fn precompute2(&mut self) -> Result<()> {
+        if self.precomputed.is_some() {
+            return Ok(());
+        }
+
+        let dp = &self.d % (&self.primes[0] - BigUint::one());
+        let dq = &self.d % (&self.primes[1] - BigUint::one());
+        let qinv = self.primes[1]
+            .clone()
+            .mod_inverse(&self.primes[0])
+            .ok_or(Error::InvalidPrime)?;
+
+        let mut r: BigUint = &self.primes[0] * &self.primes[1];
+        let mut crt_values = Vec::with_capacity(self.primes.len() - 2);
+        for prime in self.primes.iter().skip(2) {
+            let res = CRTValue {
+                exp: BigInt::from_biguint(Plus, &self.d % (prime - BigUint::one())),
+                r: BigInt::from_biguint(Plus, r.clone()),
+                coeff: BigInt::from_biguint(
+                    Plus,
+                    r.clone()
+                        .mod_inverse(prime)
+                        .ok_or(Error::InvalidCoefficient)?
+                        .to_biguint()
+                        .ok_or(Error::InvalidCoefficient)?,
+                ),
+            };
+            r *= prime;
+
+            crt_values.push(res);
+        }
+
+        self.precomputed = Some(PrecomputedValues {
+            dp,
+            dq,
+            qinv,
+            crt_values,
+        });
+
+        Ok(())
     }
 
     /// Returns the private exponent of the key.
